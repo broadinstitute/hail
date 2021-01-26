@@ -1,12 +1,13 @@
 from hailtop.config import get_deploy_config
 from hailtop.auth import get_tokens
 
-
-def init_parser(parser):  # pylint: disable=unused-argument
-    pass
+from .auth import auth
 
 
-def main(args, pass_through_args):  # pylint: disable=unused-argument
+@auth.command(
+    name='list',
+    help='List Hail credentials.')
+def auth_list():
     deploy_config = get_deploy_config()
     auth_ns = deploy_config.service_ns('auth')
     tokens = get_tokens()

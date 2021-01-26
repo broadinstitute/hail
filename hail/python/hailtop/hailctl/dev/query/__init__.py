@@ -1,3 +1,3 @@
-from . import cli
+from .query import query, set, unset, get
 
-__all__ = ['cli']
+__all__ = ['query', 'set', 'unset', 'get']
