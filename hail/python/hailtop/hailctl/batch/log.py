@@ -1,17 +1,24 @@
+import click
+
+from hailtop.batch_client.client import BatchClient
+
+from .batch import batch
 from .batch_cli_utils import get_job_if_exists, make_formatter
 
 
-def init_parser(parser):
-    parser.add_argument('batch_id', type=int, help="ID number of the desired batch")
-    parser.add_argument('job_id', type=int, help="ID number of the desired job")
-    parser.add_argument('-o', type=str, default='yaml', help="Specify output format",
-                        choices=["yaml", "json"])
+@batch.command(
+    help='Get log for a job.')
+@click.argument('batch_id')
+@click.argument('job_id')
+@click.option('--output-format', '-o',
+              type=click.Choice(['yaml', 'json']),
+              default='yaml', show_default=True,
+              help="Specify output format",)
+def log(batch_id, job_id, output_format):
+    with BatchClient(None) as client:
+        maybe_job = get_job_if_exists(client, batch_id, job_id)
+        if maybe_job is None:
+            print(f"Job with ID {job_id} on batch {batch_id} not found")
+            return
 
-
-def main(args, pass_through_args, client):  # pylint: disable=unused-argument
-    maybe_job = get_job_if_exists(client, args.batch_id, args.job_id)
-    if maybe_job is None:
-        print(f"Job with ID {args.job_id} on batch {args.batch_id} not found")
-        return
-
-    print(make_formatter(args.o)(maybe_job.log()))
+        print(make_formatter(output_format)(maybe_job.log()))

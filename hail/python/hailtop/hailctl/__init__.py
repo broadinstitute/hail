@@ -1,8 +1,10 @@
-def version() -> str:
-    import pkg_resources  # pylint: disable=import-outside-toplevel
-    return pkg_resources.resource_string(__name__, 'hail_version').decode().strip()
+from .hailctl import hailctl, main
+from . import version
+from . import dataproc
+from . import auth
+from . import dev
+from . import batch
+from . import curl
+from . import config
 
-
-__all__ = [
-    'version'
-]
+__all__ = ['hailctl', 'main', 'version', 'dataproc', 'auth', 'dev', 'batch', 'curl', 'config']

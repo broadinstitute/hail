@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import Optional, Type
+from types import TracebackType
 import asyncio
 
 from . import aioclient
@@ -218,7 +219,7 @@ class BatchClient:
     def billing_project(self):
         return self._async_client.billing_project
 
-    def list_batches(self, q=None, last_batch_id=None, limit=2**64):
+    def list_batches(self, q=None, last_batch_id=None, limit=None):
         for b in agen_to_blocking(self._async_client.list_batches(q=q, last_batch_id=last_batch_id, limit=limit)):
             yield Batch.from_async_batch(b)
 
@@ -264,6 +265,15 @@ class BatchClient:
 
     def edit_billing_limit(self, project, limit):
         return async_to_blocking(self._async_client.edit_billing_limit(project, limit))
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self,
+                 exc_type: Optional[Type[BaseException]],
+                 exc_value: Optional[BaseException],
+                 traceback: Optional[TracebackType]):
+        self.close()
 
     def close(self):
         async_to_blocking(self._async_client.close())

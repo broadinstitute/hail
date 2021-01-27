@@ -1,30 +1,40 @@
 import os
 import tempfile
 import zipfile
+import click
 
-from . import gcloud
-
-
-def init_parser(parser):
-    parser.add_argument('name', type=str, help='Cluster name.')
-    parser.add_argument('script', type=str, help="Path to script.")
-    parser.add_argument('--files', required=False, type=str, help='Comma-separated list of files to add to the working directory of the Hail application.')
-    parser.add_argument('--pyfiles', required=False, type=str, help='Comma-separated list of files (or directories with python files) to add to the PYTHONPATH.')
-    parser.add_argument('--properties', '-p', required=False, type=str, help='Extra Spark properties to set.')
-    parser.add_argument('--gcloud_configuration', help='Google Cloud configuration to submit job (defaults to currently set configuration).')
-    parser.add_argument('--dry-run', action='store_true', help="Print gcloud dataproc command, but don't run it.")
+from .dataproc import dataproc
 
 
-def main(args, pass_through_args):  # pylint: disable=unused-argument
-    print("Submitting to cluster '{}'...".format(args.name))
+@dataproc.command(
+    help="Submit a Python script to a running Dataproc cluster.")
+@click.argument('cluster_name')
+@click.argument('script')
+@click.option('--files',
+              help="Comma-separated list of files to add to the working directory of the Hail application.")
+@click.option('--pyfiles',
+              help="Comma-separated list of files (or directories with python files) to add to the PYTHONPATH.")
+@click.option('--properties', '-p',
+              help="Extra Spark properties to set.")
+@click.option('--extra-gcloud-submit-args',
+              default='',
+              help="Extra arguments to pass to 'gcloud dataproc clusters submit'")
+@click.argument('script_args', nargs=-1)
+@click.pass_context
+def submit(
+        ctx,
+        cluster_name, script,
+        files, pyfiles, properties, extra_gcloud_submit_args, script_args):
+    runner = ctx.parent.obj
+
+    print("Submitting to cluster '{}'...".format(cluster_name))
 
     # create files argument
-    files = ''
-    if args.files:
-        files = args.files
+    if not files:
+        files = ''
     pyfiles = []
-    if args.pyfiles:
-        pyfiles.extend(args.pyfiles.split(','))
+    if pyfiles:
+        pyfiles.extend(pyfiles.split(','))
     pyfiles.extend(os.environ.get('HAIL_SCRIPTS', '').split(':'))
     if pyfiles:
         tfile = tempfile.mkstemp(suffix='.zip', prefix='pyscripts_')[1]
@@ -44,35 +54,24 @@ def main(args, pass_through_args):  # pylint: disable=unused-argument
     else:
         pyfiles = ''
 
-    # create properties argument
-    properties = ''
-    if args.properties:
-        properties = args.properties
+    if not properties:
+        properties = ''
 
     # pyspark submit command
     cmd = [
-        'dataproc',
         'jobs',
         'submit',
         'pyspark',
-        args.script,
-        '--cluster={}'.format(args.name),
+        script,
+        '--cluster={}'.format(cluster_name),
         '--files={}'.format(files),
         '--py-files={}'.format(pyfiles),
         '--properties={}'.format(properties)
     ]
-    if args.gcloud_configuration:
-        cmd.append('--configuration={}'.format(args.gcloud_configuration))
 
-    # append arguments to pass to the Hail script
-    if pass_through_args:
-        cmd.append('--')
-        cmd.extend(pass_through_args)
+    if script_args:
+        cmd.extend(['--', *script_args])
 
-    # print underlying gcloud command
-    print('gcloud command:')
-    print('gcloud ' + ' '.join(cmd[:5]) + ' \\\n    ' + ' \\\n    '.join(cmd[6:]))
+    cmd.extend(extra_gcloud_submit_args.split())
 
-    # submit job
-    if not args.dry_run:
-        gcloud.run(cmd)
+    runner.run_dataproc_command(cmd)

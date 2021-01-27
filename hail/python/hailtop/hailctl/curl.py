@@ -1,22 +1,24 @@
-import sys
 import os
+import click
 
 from hailtop.auth import namespace_auth_headers
 from hailtop.config import get_deploy_config
 
+from .hailctl import hailctl
 
-def main(args):
-    if len(args) < 3:
-        print('hailctl curl NAMESPACE SERVICE PATH [args] ...', file=sys.stderr)
-        sys.exit(1)
-    ns = args[0]
-    svc = args[1]
-    path = args[2]
+
+@hailctl.command(
+    help="Issue authenticated curl requests to Hail infrastructure.")
+@click.argument('namespace')
+@click.argument('service')
+@click.argument('path')
+@click.argument('curl_args', nargs=-1)
+def curl(namespace, service, path, curl_args):
     deploy_config = get_deploy_config()
-    deploy_config = deploy_config.with_default_namespace(ns)
-    headers = namespace_auth_headers(deploy_config, ns)
+    deploy_config = deploy_config.with_default_namespace(namespace)
+    headers = namespace_auth_headers(deploy_config, namespace)
     headers = [x
                for k, v in headers.items()
                for x in ['-H', f'{k}: {v}']]
-    path = deploy_config.url(svc, path)
-    os.execvp('curl', ['curl', *headers, *args[3:], path])
+    path = deploy_config.url(service, path)
+    os.execvp('curl', ['curl', *headers, *curl_args, path])

@@ -1,17 +1,17 @@
-import json
 import sys
+import json
 
 from hailtop.auth import get_userinfo
 
-
-def init_parser(parser):  # pylint: disable=unused-argument
-    pass
+from .auth import auth
 
 
-def main(args, pass_through_args):  # pylint: disable=unused-argument
+@auth.command(
+    help="Get Hail user information.")
+def user():
     userinfo = get_userinfo()
     if userinfo is None:
-        print('not logged in')
+        print("Not logged in.", file=sys.stderr)
         sys.exit(1)
     result = {
         'username': userinfo['username'],

@@ -5,9 +5,7 @@ from hailtop.config import get_deploy_config
 from hailtop.auth import get_tokens, service_auth_headers
 from hailtop.httpx import client_session
 
-
-def init_parser(parser):  # pylint: disable=unused-argument
-    pass
+from .auth import auth
 
 
 async def async_main():
@@ -32,6 +30,8 @@ async def async_main():
     print('Logged out.')
 
 
-def main(args, pass_through_args):  # pylint: disable=unused-argument
+@auth.command(
+    help="Revoke Hail credentials.")
+def logout():
     loop = asyncio.get_event_loop()
     loop.run_until_complete(async_main())

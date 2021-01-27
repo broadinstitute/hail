@@ -1,108 +1,80 @@
-import os.path
 import sys
+import os.path
+import click
 
-from . import gcloud
+from .dataproc import dataproc
 from .deploy_metadata import get_deploy_metadata
 
 
-def init_parser(parser):
-    parser.add_argument('name', type=str, help='Cluster name.')
-    parser.add_argument('--num-workers', '--n-workers', '-w', type=int,
-                        help='New number of worker machines (min. 2).')
-    parser.add_argument('--num-secondary-workers', '--num-preemptible-workers', '--n-pre-workers', '-p', type=int,
-                        help='New number of secondary (preemptible) worker machines.')
-    parser.add_argument('--graceful-decommission-timeout', '--graceful', type=str,
-                        help='If set, cluster size downgrade will use graceful decommissioning with the given timeout (e.g. "60m").')
-    max_idle_group = parser.add_mutually_exclusive_group()
-    max_idle_group.add_argument('--max-idle',
-                                type=str,
-                                help='New maximum idle time before shutdown (e.g. "60m").')
-    max_idle_group.add_argument('--no-max-idle',
-                                action='store_true',
-                                help='Disable auto deletion after idle time.')
-    max_age_group = parser.add_mutually_exclusive_group()
-    max_age_group.add_argument(
-        '--expiration-time',
-        type=str,
-        help=('The time when cluster will be auto-deleted. (e.g. "2020-01-01T20:00:00Z"). '
-              'Execute gcloud topic datatimes for more information.'))
-    max_age_group.add_argument(
-        '--max-age',
-        type=str,
-        help=('If the cluster is older than this, it will be auto-deleted. (e.g. "2h")'
-              'Execute gcloud topic datatimes for more information.'))
-    max_age_group.add_argument(
-        '--no-max-age',
-        action='store_true',
-        help='Disable auto-deletion due to max age or expiration time.')
-    parser.add_argument('--dry-run', action='store_true', help="Print gcloud dataproc command, but don't run it.")
-    parser.add_argument('--zone', '-z', type=str, help='Compute zone for Dataproc cluster.')
-    wheel_group = parser.add_mutually_exclusive_group()
-    wheel_group.add_argument('--update-hail-version', action='store_true', help="Update the version of hail running on cluster to match "
-                             "the currently installed version.")
-    wheel_group.add_argument('--wheel', type=str, help='New Hail installation.')
+@dataproc.command(
+    help="""Modify an existing Dataproc cluster.
 
+'hailctl dataproc modify' works by calling 'gcloud dataproc clusters update' and then updating the Hail version if '--update-hail-version' or '--wheel' is specified.  You can pass arguments to the 'update' command with the option '--extra-gcloud-update-args'.
 
-def main(args, pass_through_args):
-    modify_args = []
-    if args.num_workers is not None:
-        modify_args.append('--num-workers={}'.format(args.num_workers))
+The following 'gcloud dataproc clusters update' options may be useful:
 
-    if args.num_secondary_workers is not None:
-        modify_args.append('--num-secondary-workers={}'.format(args.num_secondary_workers))
+  --num-workers=NUM_WORKERS: New number of worker machines, minimum 2.
 
-    if args.graceful_decommission_timeout:
-        if not modify_args:
-            sys.exit("Error: Cannot use --graceful-decommission-timeout without resizing the cluster.")
-        modify_args.append('--graceful-decommission-timeout={}'.format(args.graceful_decommission_timeout))
+  --num-secondary-workers=NUM_SECONDARY_WORKERS: New number of secondary (preemptible) worker machines.
 
-    if args.max_idle:
-        modify_args.append('--max-idle={}'.format(args.max_idle))
-    if args.no_max_idle:
-        modify_args.append('--no-max-idle')
-    if args.expiration_time:
-        modify_args.append('--expiration_time={}'.format(args.expiration_time))
-    if args.max_age:
-        modify_args.append('--max-age={}'.format(args.max_age))
-    if args.no_max_age:
-        modify_args.append('--no-max-age')
+  --graceful-decommission-timeout=GRACEFUL_DECOMMISSION_TIMEOUT: Graceful decommissioning allows removing nodes from the cluster without interrupting jobs in progress.  Timeout specifies how long to wait for jobs in progress to finish before forcefully removing nodes (and potentially interrupting jobs).  Timeout defaults to 0 if not set (for forceful decommission), and the maximum allowed timeout is 1 day.
 
-    if modify_args:
-        cmd = ['dataproc', 'clusters', 'update', args.name] + modify_args
+  At most one of the following may be set:
 
-        if args.beta:
-            cmd.insert(0, 'beta')
+    --expiration-time=EXPIRATION_TIME: The time when cluster will be auto-deleted.
 
-        cmd.extend(pass_through_args)
+    --max-age=MAX_AGE: The lifespan of the cluster before it is auto-deleted, such as '60m' or '1d'.
 
-        # print underlying gcloud command
-        print('gcloud ' + ' '.join(cmd[:4]) + ' \\\n    ' + ' \\\n    '.join(cmd[4:]))
+    --no-max-age: Cancel the cluster auto-deletion by maximum cluster age, as configured by max-age or --expiration-time flags.
 
-        # Update cluster
-        if not args.dry_run:
-            print("Updating cluster '{}'...".format(args.name))
-            gcloud.run(cmd)
+  At most one of the following may be set:
 
-    wheel = None
-    if args.update_hail_version:
+      --max-idle=MAX_IDLE: The duration before cluster is auto-deleted after last job finished, such as '60m' or '1d'.
+
+      --no-max-idle: Cancel the cluster auto-deletion by cluster idle duration (configured by --max-idle flag).
+
+  See 'gcloud dataproc clusters update --help' for more information.
+""")
+@click.argument('cluster_name')
+@click.option('--update-hail-version', is_flag=True,
+              help=("Update the version of hail running on cluster to match "
+                    "the currently installed version."))
+@click.option('--wheel', help='New Hail installation.')
+@click.option('--extra-gcloud-update-args',
+              default='',
+              help="Extra arguments to pass to 'gcloud dataproc clusters update'.  The "
+              "'update' command is only run if this option is specified.")
+@click.pass_context
+def modify(ctx,
+           cluster_name,
+           update_hail_version, wheel, extra_gcloud_update_args):
+    runner = ctx.parent.obj
+
+    if wheel and update_hail_version:
+        print('at most one of --wheel and --update-hail-version allowed', file=sys.stderr)
+        sys.exit(1)
+
+    if not wheel and not update_hail_version and not extra_gcloud_update_args:
+        print('nothing to do: none of --wheel, --update-hail-version or --extra-gcloud-update-args specified', file=sys.stderr)
+        sys.exit(1)
+
+    if extra_gcloud_update_args:
+        print("Updating cluster '{}'...".format(cluster_name))
+        cmd = ['clusters', 'update', cluster_name, *extra_gcloud_update_args.split()]
+        runner.run_dataproc_command(cmd)
+
+    if update_hail_version:
         deploy_metadata = get_deploy_metadata()
+        assert not wheel
         wheel = deploy_metadata["wheel"]
-    else:
-        wheel = args.wheel
 
     if wheel is not None:
-        zone = args.zone if args.zone else gcloud.get_config("compute/zone")
-        if not zone:
-            raise RuntimeError("Could not determine compute zone. Use --zone argument to hailctl, or use `gcloud config set compute/zone <my-zone>` to set a default.")
-
         wheelfile = os.path.basename(wheel)
         cmds = []
         if wheel.startswith("gs://"):
             cmds.append([
-                'compute',
                 'ssh',
-                '{}-m'.format(args.name),
-                '--zone={}'.format(zone),
+                '{}-m'.format(cluster_name),
                 '--',
                 f'sudo gsutil cp {wheel} /tmp/ && '
                 'sudo /opt/conda/default/bin/pip uninstall -y hail && '
@@ -113,17 +85,13 @@ def main(args, pass_through_args):
         else:
             cmds.extend([
                 [
-                    'compute',
                     'scp',
-                    '--zone={}'.format(zone),
                     wheel,
-                    '{}-m:/tmp/'.format(args.name)
+                    '{}-m:/tmp/'.format(cluster_name)
                 ],
                 [
-                    'compute',
                     'ssh',
-                    f'{args.name}-m',
-                    f'--zone={zone}',
+                    f'{cluster_name}-m',
                     '--',
                     'sudo /opt/conda/default/bin/pip uninstall -y hail && '
                     f'sudo /opt/conda/default/bin/pip install --no-dependencies /tmp/{wheelfile} && '
@@ -133,10 +101,4 @@ def main(args, pass_through_args):
             ])
 
         for cmd in cmds:
-            print('gcloud ' + ' '.join(cmd))
-            if not args.dry_run:
-                gcloud.run(cmd)
-
-    if not wheel and not modify_args and pass_through_args:
-        sys.stderr.write('ERROR: found pass-through arguments but not known modification args.')
-        sys.exit(1)
+            runner.run_compute_command(cmd)
