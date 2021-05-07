@@ -2110,7 +2110,10 @@ SELECT instance_id, internal_token, n_tokens FROM globals;
 
 
 async def on_cleanup(app):
-    app['task_manager'].shutdown()
+    try:
+        app['task_manager'].shutdown()
+    finally:
+        await app['log_store'].close()
 
 
 def run():
