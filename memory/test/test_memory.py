@@ -29,7 +29,7 @@ class Tests(unittest.TestCase):
         token = uuid.uuid4()
         self.test_path = f'gs://{bucket_name}/memory-tests/{token}'
 
-        self.fs = GoogleStorageAsyncFS(gcs_project=os.environ['PROJECT'])
+        self.fs = GoogleStorageAsyncFS(project=os.environ['PROJECT'])
         self.sem = asyncio.Semaphore(50)
         self.client = BlockingMemoryClient(fs=self.fs)
         self.temp_files = set()
