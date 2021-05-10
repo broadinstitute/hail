@@ -156,7 +156,7 @@ async def on_cleanup(app):
                 del app['k8s_client']
                 await asyncio.gather(*(t for t in asyncio.all_tasks() if t is not asyncio.current_task()))
             finally:
-                for user, items in app['users'].items():
+                for items in app['users'].values():
                     try:
                         await items['fs'].close()
                     except:
