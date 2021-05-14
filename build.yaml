@@ -2535,7 +2535,7 @@ steps:
       memory: 3.75Gi
       cpu: '1'
     script: |
-      export HAIL_GSA_KEY_FILE=/test-gsa-key/key.json
+      export GOOGLE_APPLICATION_CREDENTIALS=/test-gsa-key/key.json
       export PROJECT={{ global.project }}
       hailctl config set batch/bucket hail-test-dmk9z
       python3 -m pytest --log-cli-level=INFO -s -vv --instafail --durations=50 /io/test/
