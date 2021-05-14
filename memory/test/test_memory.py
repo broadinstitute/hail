@@ -10,8 +10,12 @@ from hailtop.utils import async_to_blocking
 
 
 class BlockingMemoryClient:
-    def __init__(self, gcs_project=None, fs=None):
-        self._client = MemoryClient(gcs_project, fs)
+    def __init__(self, gcs_project=None, fs=None, deploy_config=None, session=None, headers=None, _token=None):
+        self._client = MemoryClient(gcs_project, fs, deploy_config, session, headers, _token)
+        async_to_blocking(self._client.async_init())
+
+    def _get_file_if_exists(self, filename):
+        return async_to_blocking(self._client._get_file_if_exists(filename))
 
     def read_file(self, filename):
         return async_to_blocking(self._client.read_file(filename))
@@ -44,12 +48,15 @@ class Tests(unittest.TestCase):
 
     async def add_temp_file_from_string(self, name: str, str_value: bytes):
         handle = f'{self.test_path}/{name}'
-        await self.client.write_file(handle, str_value)
+
+        async with await self.fs.create(handle) as f:
+            await f.write(str_value)
+
         return handle
 
     def test_non_existent(self):
         for _ in range(3):
-            self.assertIsNone(self.client.read_file(f'{self.test_path}/nonexistent'))
+            self.assertIsNone(self.client._get_file_if_exists(f'{self.test_path}/nonexistent'))
 
     def test_small_write_around(self):
         async def read(url):
@@ -62,9 +69,9 @@ class Tests(unittest.TestCase):
             expected = async_to_blocking(read(handle))
             self.assertEqual(expected, data)
             i = 0
-            cached = self.client.read_file(handle)
+            cached = self.client._get_file_if_exists(handle)
             while cached is None and i < 10:
-                cached = self.client.read_file(handle)
+                cached = self.client._get_file_if_exists(handle)
                 i += 1
             self.assertEqual(cached, expected)
 
@@ -73,5 +80,5 @@ class Tests(unittest.TestCase):
         for file, data in cases:
             filename = f'{self.test_path}/{file}'
             self.client.write_file(filename, data)
-            cached = self.client.read_file(filename)
+            cached = self.client._get_file_if_exists(filename)
             self.assertEqual(cached, data)
