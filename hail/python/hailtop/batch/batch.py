@@ -1,14 +1,12 @@
 import os
 import re
-import concurrent
 from typing import Optional, Dict, Union, List, Any, Set
 
 from hailtop.utils import secret_alnum_string
+from hailtop.aiogoogle import GoogleStorageAsyncFS
 
 from . import backend as _backend, job, resource as _resource  # pylint: disable=cyclic-import
 from .exceptions import BatchException
-
-from ..google_storage import GCS
 
 
 class Batch:
@@ -138,16 +136,15 @@ class Batch:
         self._default_python_image = default_python_image
 
         self._project = project
-        self.__gcs: Optional[GCS] = None
+        self.__gcs_fs: Optional[GoogleStorageAsyncFS] = None
 
         self._cancel_after_n_failures = cancel_after_n_failures
 
     @property
-    def _gcs(self):
-        if self.__gcs is None:
-            self.__gcs = GCS(blocking_pool=concurrent.futures.ThreadPoolExecutor(),
-                             project=self._project)
-        return self.__gcs
+    def _gcs_fs(self):
+        if self.__gcs_fs is None:
+            self.__gcs_fs = GoogleStorageAsyncFS(project=self._project)
+        return self.__gcs_fs
 
     def new_job(self,
                 name: Optional[str] = None,

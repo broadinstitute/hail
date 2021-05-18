@@ -37,7 +37,7 @@ from web_common import setup_aiohttp_jinja2, setup_common_static_routes, render_
 import googlecloudprofiler
 import uvloop
 
-from ..log_store import LogStore
+from ..file_store import FileStore
 from ..batch import cancel_batch_in_db
 from ..batch_configuration import (
     REFRESH_INTERVAL_IN_SECONDS,
@@ -962,8 +962,8 @@ SELECT instance_id, internal_token FROM globals;
     app['async_worker_pool'] = async_worker_pool
 
     credentials = aiogoogle.auth.credentials.Credentials.from_file('/gsa-key/key.json')
-    log_store = LogStore(BATCH_BUCKET_NAME, instance_id, credentials=credentials)
-    app['log_store'] = log_store
+    fs = aiogoogle.GoogleStorageAsyncFS(credentials=credentials)
+    app['file_store'] = FileStore(fs, BATCH_BUCKET_NAME, instance_id)
 
     zone_monitor = ZoneMonitor(app)
     app['zone_monitor'] = zone_monitor
@@ -1015,7 +1015,7 @@ async def on_cleanup(app):
                         app['gce_event_monitor'].shutdown()
                     finally:
                         try:
-                            await app['log_store'].close()
+                            await app['file_store'].close()
                         finally:
                             try:
                                 app['task_manager'].shutdown()

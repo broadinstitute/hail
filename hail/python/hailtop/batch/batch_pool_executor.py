@@ -10,10 +10,11 @@ import sys
 from hailtop.utils import secret_alnum_string, partition
 import hailtop.batch_client.aioclient as low_level_batch_client
 from hailtop.batch_client.parse import parse_cpu_in_mcpu
+import hailtop.aiogoogle as aiogoogle
 
 from .batch import Batch
 from .backend import ServiceBackend
-from ..google_storage import GCS
+
 
 if sys.version_info < (3, 7):
     def create_task(coro, *, name=None):  # pylint: disable=unused-argument
@@ -132,8 +133,7 @@ class BatchPoolExecutor:
         self.directory = f'gs://{bucket}/batch-pool-executor/{self.name}/'
         self.inputs = self.directory + 'inputs/'
         self.outputs = self.directory + 'outputs/'
-        self.gcs = GCS(blocking_pool=concurrent.futures.ThreadPoolExecutor(),
-                       project=project)
+        self.gcs_fs = aiogoogle.GoogleStorageAsyncFS(project=project)
         self.futures: List[BatchPoolFuture] = []
         self.finished_future_count = 0
         self._shutdown = False
@@ -344,7 +344,7 @@ class BatchPoolExecutor:
         dill.dump(functools.partial(unapplied, *args, **kwargs), pipe, recurse=True)
         pipe.seek(0)
         pickledfun_gcs = self.inputs + f'{name}/pickledfun'
-        await self.gcs.write_gs_file_from_file_like_object(pickledfun_gcs, pipe)
+        await self.gcs_fs.write(pickledfun_gcs, pipe.getvalue())
         pickledfun_local = batch.read_input(pickledfun_gcs)
 
         thread_limit = "1"
@@ -423,9 +423,12 @@ with open(\\"{j.ofile}\\", \\"wb\\") as out:
 
     def _cleanup(self, wait):
         if self.cleanup_bucket:
+            def _rmtree(url):
+
+
             async_to_blocking(
-                self.gcs.delete_gs_files(self.directory))
-        self.gcs.shutdown(wait)
+                self.gcs_fs.rmtree(sem, self.directory))
+        self.gcs_fs.shutdown(wait)
         self.backend.close()
 
 
@@ -522,7 +525,7 @@ class BatchPoolFuture:
                 raise ValueError(
                     f"submitted job failed:\n{main_container_status['error']}")
             value, traceback = dill.loads(
-                await self.executor.gcs.read_binary_gs_file(self.output_gcs))
+                await self.executor.gcs_fs.read_binary_gs_file(self.output_gcs))
             if traceback is None:
                 return value
             assert isinstance(value, BaseException)

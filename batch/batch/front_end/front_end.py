@@ -66,7 +66,7 @@ from ..exceptions import (
     BatchOperationAlreadyCompletedError,
 )
 from ..inst_coll_config import InstanceCollectionConfigs
-from ..log_store import LogStore
+from ..file_store import FileStore
 from ..database import CallError, check_call_procedure
 from ..batch_configuration import BATCH_BUCKET_NAME, DEFAULT_NAMESPACE, SCOPE
 from ..globals import HTTP_CLIENT_MAX_SIZE, BATCH_FORMAT_VERSION, memory_to_worker_type
@@ -330,12 +330,12 @@ async def _get_job_log_from_record(app, batch_id, job_id, record):
                 raise
 
     if state in ('Error', 'Failed', 'Success'):
-        log_store: LogStore = app['log_store']
+        file_store: FileStore = app['file_store']
         batch_format_version = BatchFormatVersion(record['format_version'])
 
         async def _read_log_from_gcs(task):
             try:
-                data = await log_store.read_log_file(batch_format_version, batch_id, job_id, record['attempt_id'], task)
+                data = await file_store.read_log_file(batch_format_version, batch_id, job_id, record['attempt_id'], task)
             except google.api_core.exceptions.NotFound:
                 id = (batch_id, job_id)
                 log.exception(f'missing log file for {id} and task {task}')
@@ -406,7 +406,7 @@ WHERE batch_id = %s AND job_id = %s;
 
 async def _get_full_job_spec(app, record):
     db: Database = app['db']
-    log_store: LogStore = app['log_store']
+    file_store: FileStore = app['file_store']
 
     batch_id = record['batch_id']
     job_id = record['job_id']
@@ -418,7 +418,7 @@ async def _get_full_job_spec(app, record):
     token, start_job_id = await SpecWriter.get_token_start_id(db, batch_id, job_id)
 
     try:
-        spec = await log_store.read_spec_file(batch_id, token, start_job_id, job_id)
+        spec = await file_store.read_spec_file(batch_id, token, start_job_id, job_id)
         return json.loads(spec)
     except google.api_core.exceptions.NotFound:
         id = (batch_id, job_id)
@@ -427,7 +427,7 @@ async def _get_full_job_spec(app, record):
 
 
 async def _get_full_job_status(app, record):
-    log_store: LogStore = app['log_store']
+    file_store: FileStore = app['file_store']
 
     batch_id = record['batch_id']
     job_id = record['job_id']
@@ -443,7 +443,7 @@ async def _get_full_job_status(app, record):
             return json.loads(record['status'])
 
         try:
-            status = await log_store.read_status_file(batch_id, job_id, attempt_id)
+            status = await file_store.read_status_file(batch_id, job_id, attempt_id)
             return json.loads(status)
         except google.api_core.exceptions.NotFound:
             id = (batch_id, job_id)
@@ -614,7 +614,7 @@ def check_service_account_permissions(user, sa):
 async def create_jobs(request, userdata):
     app = request.app
     db: Database = app['db']
-    log_store: LogStore = app['log_store']
+    file_store: FileStore = app['file_store']
 
     batch_id = int(request.match_info['batch_id'])
 
@@ -654,7 +654,7 @@ WHERE user = %s AND id = %s AND NOT deleted;
                 raise web.HTTPBadRequest(reason=e.reason)
 
         async with timer.step('build db args'):
-            spec_writer = SpecWriter(log_store, batch_id)
+            spec_writer = SpecWriter(file_store, batch_id)
 
             jobs_args = []
             job_parents_args = []
@@ -2088,7 +2088,8 @@ SELECT instance_id, internal_token, n_tokens FROM globals;
     app['batch_headers'] = {'Authorization': f'Bearer {row["internal_token"]}'}
 
     credentials = aiogoogle.auth.credentials.Credentials.from_file('/gsa-key/key.json')
-    app['log_store'] = LogStore(BATCH_BUCKET_NAME, instance_id, credentials=credentials)
+    fs = aiogoogle.GoogleStorageAsyncFS(credentials=credentials)
+    app['file_store'] = FileStore(fs, BATCH_BUCKET_NAME, instance_id)
 
     inst_coll_configs = InstanceCollectionConfigs(app)
     app['inst_coll_configs'] = inst_coll_configs
@@ -2113,7 +2114,7 @@ async def on_cleanup(app):
     try:
         app['task_manager'].shutdown()
     finally:
-        await app['log_store'].close()
+        await app['file_store'].close()
 
 
 def run():
