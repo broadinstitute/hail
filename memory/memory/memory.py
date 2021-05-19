@@ -107,8 +107,7 @@ async def get_file_or_none(app, username, fs, filepath):
 async def load_file(redis, files, file_key, fs: GoogleStorageAsyncFS, filepath):
     try:
         log.info(f"memory: {file_key}: reading.")
-        async with await fs.open(filepath) as f:
-            data = await f.read()
+        data = await fs.read(filepath)
         log.info(f"memory: {file_key}: read {filepath}")
     except Exception as e:
         files.remove(file_key)
@@ -120,8 +119,7 @@ async def load_file(redis, files, file_key, fs: GoogleStorageAsyncFS, filepath):
 async def persist_in_gcs(fs: GoogleStorageAsyncFS, files: Set[str], file_key: str, filepath: str, data: bytes):
     try:
         log.info(f"memory: {file_key}: persisting.")
-        async with await fs.create(filepath) as f:
-            await f.write(data)
+        await fs.write(filepath, data)
         log.info(f"memory: {file_key}: persisted {filepath}")
     except Exception as e:
         files.remove(file_key)

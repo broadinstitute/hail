@@ -2,6 +2,7 @@ import logging
 import asyncio
 
 from hailtop.aiotools.fs import AsyncFS
+from hailtop.utils import retry_transient_errors
 
 from .spec_writer import SpecWriter
 from .globals import BATCH_FORMAT_VERSION
@@ -12,20 +13,15 @@ log = logging.getLogger('logstore')
 
 class FileStore:
     def __init__(self, fs: AsyncFS, batch_logs_bucket_name, instance_id):
+        self.fs = fs
         self.batch_logs_bucket_name = batch_logs_bucket_name
         self.instance_id = instance_id
-        self.batch_logs_root = f'gs://{batch_logs_bucket_name}/batch/logs/{instance_id}/batch'
 
-        self.fs = fs
-        self.sem = asyncio.Semaphore(50)
+        self.batch_logs_root = f'gs://{batch_logs_bucket_name}/batch/logs/{instance_id}/batch'
 
         log.info(f'BATCH_LOGS_ROOT {self.batch_logs_root}')
         format_version = BatchFormatVersion(BATCH_FORMAT_VERSION)
         log.info(f'EXAMPLE BATCH_JOB_LOGS_PATH {self.log_path(format_version, 1, 1, "abc123", "main")}')
-
-    async def _rmtree(self, url):
-        async with self.sem:
-            await self.fs.rmtree(self.sem, url)
 
     def batch_log_dir(self, batch_id):
         return f'{self.batch_logs_root}/{batch_id}'
@@ -37,7 +33,8 @@ class FileStore:
 
     async def read_log_file(self, format_version, batch_id, job_id, attempt_id, task):
         url = self.log_path(format_version, batch_id, job_id, attempt_id, task)
-        return (await self.fs.read(url)).decode('utf-8')
+        data = await self.fs.read(url)
+        return data.decode('utf-8')
 
     async def write_log_file(self, format_version, batch_id, job_id, attempt_id, task, data):
         url = self.log_path(format_version, batch_id, job_id, attempt_id, task)
@@ -45,14 +42,15 @@ class FileStore:
 
     async def delete_batch_logs(self, batch_id):
         url = self.batch_log_dir(batch_id)
-        await self._rmtree(url)
+        await self.fs.rmtree(None, url)
 
     def status_path(self, batch_id, job_id, attempt_id):
         return f'{self.batch_log_dir(batch_id)}/{job_id}/{attempt_id}/status.json'
 
     async def read_status_file(self, batch_id, job_id, attempt_id):
         url = self.status_path(batch_id, job_id, attempt_id)
-        return (await self.fs.read(url)).decode('utf-8')
+        data = await self.fs.read(url)
+        return data.decode('utf-8')
 
     async def write_status_file(self, batch_id, job_id, attempt_id, status):
         url = self.status_path(batch_id, job_id, attempt_id)
@@ -78,7 +76,8 @@ class FileStore:
 
         spec_url = self.specs_path(batch_id, token)
         spec_start, spec_end = SpecWriter.get_spec_file_offsets(offsets)
-        return (await self.fs.read_range(spec_url, spec_start, spec_end)).decode('utf-8')
+        data = await self.fs.read_range(spec_url, spec_start, spec_end)
+        return data.decode('utf-8')
 
     async def write_spec_file(self, batch_id, token, data_bytes, offsets_bytes):
         idx_url = self.specs_index_path(batch_id, token)
@@ -91,7 +90,7 @@ class FileStore:
 
     async def delete_spec_file(self, batch_id, token):
         url = self.specs_dir(batch_id, token)
-        await self._rmtree(url)
+        await self.rmtree(None, url)
 
     async def close(self):
         await self.fs.close()

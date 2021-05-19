@@ -51,9 +51,7 @@ class MemoryClient:
         data = await self._get_file_if_exists(filename)
         if data is not None:
             return data
-
-        async with await self._fs.open(filename) as f:
-            return await f.read()
+        return await self._fs.read(filename)
 
     async def write_file(self, filename, data):
         params = {'q': filename}
