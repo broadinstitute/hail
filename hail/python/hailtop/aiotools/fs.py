@@ -156,6 +156,14 @@ class AsyncFS(abc.ABC):
                 await f.write(data)
         await retry_transient_errors(_write)
 
+    async def exists(self, url: str) -> bool:
+        try:
+            await self.statfile(url)
+        except FileNotFoundError:
+            return False
+        else:
+            return True
+
     async def close(self) -> None:
         pass
 
@@ -897,6 +905,10 @@ class RouterAsyncFS(AsyncFS):
     async def rmtree(self, sema: Optional[asyncio.Semaphore], url: str) -> None:
         fs = self._get_fs(url)
         return await fs.rmtree(sema, url)
+
+    async def exists(self, url: str) -> bool:
+        fs = self._get_fs(url)
+        return await fs.exists(url)
 
     async def close(self) -> None:
         for fs in self._filesystems:
