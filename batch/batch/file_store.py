@@ -89,7 +89,7 @@ class FileStore:
 
     async def delete_spec_file(self, batch_id, token):
         url = self.specs_dir(batch_id, token)
-        await self.rmtree(None, url)
+        await self.fs.rmtree(None, url)
 
     async def close(self):
         await self.fs.close()
