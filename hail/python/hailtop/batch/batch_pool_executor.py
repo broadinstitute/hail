@@ -424,7 +424,7 @@ with open(\\"{j.ofile}\\", \\"wb\\") as out:
     def _cleanup(self, wait):
         if self.cleanup_bucket:
             async_to_blocking(self.gcs_fs.rmtree(None, self.directory))
-        async_to_blocking(self.gcs_fs.shutdown(wait))
+        async_to_blocking(self.gcs_fs.close(wait))
         self.backend.close()
 
 

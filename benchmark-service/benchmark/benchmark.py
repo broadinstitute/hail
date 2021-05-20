@@ -221,7 +221,7 @@ async def lookup(request, userdata):  # pylint: disable=unused-argument
     context = {
         'file': file,
         'benchmarks': benchmarks_context,
-        'benchmark_file_list': list_benchmark_files(app['gs_reader']),
+        'benchmark_file_list': await list_benchmark_files(app['gs_reader']),
     }
     return await render_template('benchmark', request, userdata, 'lookup.html', context)
 
@@ -248,7 +248,7 @@ async def compare(request, userdata):  # pylint: disable=unused-argument
         'benchmarks1': benchmarks_context1,
         'benchmarks2': benchmarks_context2,
         'comparisons': comparisons,
-        'benchmark_file_list': list_benchmark_files(app['gs_reader']),
+        'benchmark_file_list': await list_benchmark_files(app['gs_reader']),
     }
     return await render_template('benchmark', request, userdata, 'compare.html', context)
 

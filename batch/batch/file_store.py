@@ -2,7 +2,6 @@ import logging
 import asyncio
 
 from hailtop.aiotools.fs import AsyncFS
-from hailtop.utils import retry_transient_errors
 
 from .spec_writer import SpecWriter
 from .globals import BATCH_FORMAT_VERSION

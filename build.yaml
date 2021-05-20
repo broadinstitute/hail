@@ -3082,6 +3082,7 @@ steps:
     script: |
       cd /io/hailtop
       set -ex
+      export GOOGLE_APPLICATION_CREDENTIALS=/test-gsa-key/key.json
       export HAIL_GSA_KEY_FILE=/test-gsa-key/key.json
       export PYTEST_SPLITS=5
       export PYTEST_SPLIT_INDEX=0
@@ -3134,6 +3135,7 @@ steps:
     script: |
       cd /io/hailtop
       set -ex
+      export GOOGLE_APPLICATION_CREDENTIALS=/test-gsa-key/key.json
       export HAIL_GSA_KEY_FILE=/test-gsa-key/key.json
       export PYTEST_SPLITS=5
       export PYTEST_SPLIT_INDEX=1
@@ -3186,6 +3188,7 @@ steps:
     script: |
       cd /io/hailtop
       set -ex
+      export GOOGLE_APPLICATION_CREDENTIALS=/test-gsa-key/key.json
       export HAIL_GSA_KEY_FILE=/test-gsa-key/key.json
       export PYTEST_SPLITS=5
       export PYTEST_SPLIT_INDEX=2
@@ -3238,6 +3241,7 @@ steps:
     script: |
       cd /io/hailtop
       set -ex
+      export GOOGLE_APPLICATION_CREDENTIALS=/test-gsa-key/key.json
       export HAIL_GSA_KEY_FILE=/test-gsa-key/key.json
       export PYTEST_SPLITS=5
       export PYTEST_SPLIT_INDEX=3
@@ -3290,6 +3294,7 @@ steps:
     script: |
       cd /io/hailtop
       set -ex
+      export GOOGLE_APPLICATION_CREDENTIALS=/test-gsa-key/key.json
       export HAIL_GSA_KEY_FILE=/test-gsa-key/key.json
       export PYTEST_SPLITS=5
       export PYTEST_SPLIT_INDEX=4
