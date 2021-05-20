@@ -394,7 +394,7 @@ with open(\\"{j.ofile}\\", \\"wb\\") as out:
     def _finish_future(self):
         self.finished_future_count += 1
         if self._shutdown and self.finished_future_count == len(self.futures):
-            self._cleanup(False)
+            self._cleanup()
 
     def shutdown(self, wait: bool = True):
         """Allow temporary resources to be cleaned up.
@@ -418,13 +418,13 @@ with open(\\"{j.ofile}\\", \\"wb\\") as out:
             async_to_blocking(
                 asyncio.gather(*[ignore_exceptions(f) for f in self.futures]))
         if self.finished_future_count == len(self.futures):
-            self._cleanup(False)
+            self._cleanup()
         self._shutdown = True
 
-    def _cleanup(self, wait):
+    def _cleanup(self):
         if self.cleanup_bucket:
             async_to_blocking(self.gcs_fs.rmtree(None, self.directory))
-        async_to_blocking(self.gcs_fs.close(wait))
+        async_to_blocking(self.gcs_fs.close())
         self.backend.close()
 
 
