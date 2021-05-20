@@ -139,16 +139,13 @@ class Batch:
 
         self._project = project
         self.__gcs_fs: Optional[RouterAsyncFS] = None
-        self._thread_pool: Optional[ThreadPoolExecutor] = None
 
         self._cancel_after_n_failures = cancel_after_n_failures
 
     @property
     def _gcs_fs(self):
         if self.__gcs_fs is None:
-            if self._thread_pool is None:
-                self._thread_pool = ThreadPoolExecutor()
-            self.__gcs_fs = RouterAsyncFS('file', [LocalAsyncFS(self._thread_pool), GoogleStorageAsyncFS(project=self._project)])
+            self.__gcs_fs = RouterAsyncFS('file', [LocalAsyncFS(ThreadPoolExecutor()), GoogleStorageAsyncFS(project=self._project)])
         return self.__gcs_fs
 
     def new_job(self,
