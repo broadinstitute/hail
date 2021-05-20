@@ -151,6 +151,7 @@ class AsyncFS(abc.ABC):
             return await f.read(n)
 
     async def write(self, url: str, data: bytes) -> None:
+        await self.makedirs(url, exist_ok=True)
         async def _write() -> None:
             async with await self.create(url, retry_writes=False) as f:
                 await f.write(data)
