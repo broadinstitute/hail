@@ -53,7 +53,7 @@ with open(os.environ.get('HAIL_CI_OAUTH_TOKEN', 'oauth-token/oauth-token'), 'r')
     oauth_token = f.read().strip()
 
 
-def get_benchmarks(app, file_path):
+async def get_benchmarks(app, file_path):
     log.info(f'get_benchmarks file_path={file_path}')
     gs_reader: aiogoogle.GoogleStorageAsyncFS = app['gs_reader']
     try:
@@ -167,7 +167,7 @@ async def healthcheck(request: web.Request) -> web.Response:  # pylint: disable=
 @web_authenticated_developers_only(redirect=False)
 async def show_name(request: web.Request, userdata) -> web.Response:  # pylint: disable=unused-argument
     file_path = request.query.get('file')
-    benchmarks = get_benchmarks(request.app, file_path)
+    benchmarks = await get_benchmarks(request.app, file_path)
     name_data = benchmarks['data'][str(request.match_info['name'])]
 
     try:
@@ -217,7 +217,7 @@ async def lookup(request, userdata):  # pylint: disable=unused-argument
     if file is None:
         benchmarks_context = None
     else:
-        benchmarks_context = get_benchmarks(request.app, file)
+        benchmarks_context = await get_benchmarks(request.app, file)
     context = {
         'file': file,
         'benchmarks': benchmarks_context,
@@ -238,8 +238,8 @@ async def compare(request, userdata):  # pylint: disable=unused-argument
         benchmarks_context2 = None
         comparisons = None
     else:
-        benchmarks_context1 = get_benchmarks(app, file1)
-        benchmarks_context2 = get_benchmarks(app, file2)
+        benchmarks_context1 = await get_benchmarks(app, file1)
+        benchmarks_context2 = await get_benchmarks(app, file2)
         comparisons = final_comparisons(get_comparisons(benchmarks_context1, benchmarks_context2, metric))
     context = {
         'file1': file1,
@@ -369,7 +369,7 @@ async def update_commit(app, sha):  # pylint: disable=unused-argument
 
     has_results_file = await gs_reader.exists(file_path)
     if has_results_file and sha in benchmark_data['commits']:
-        benchmarks = get_benchmarks(app, file_path)
+        benchmarks = await get_benchmarks(app, file_path)
         commit['geo_mean'] = benchmarks['geometric_mean']
         geo_mean = commit['geo_mean']
         log.info(f'geo mean is {geo_mean}')

@@ -423,12 +423,8 @@ with open(\\"{j.ofile}\\", \\"wb\\") as out:
 
     def _cleanup(self, wait):
         if self.cleanup_bucket:
-            def _rmtree(url):
-
-
-            async_to_blocking(
-                self.gcs_fs.rmtree(sem, self.directory))
-        self.gcs_fs.shutdown(wait)
+            async_to_blocking(self.gcs_fs.rmtree(None, self.directory))
+        async_to_blocking(self.gcs_fs.shutdown(wait))
         self.backend.close()
 
 
@@ -525,7 +521,7 @@ class BatchPoolFuture:
                 raise ValueError(
                     f"submitted job failed:\n{main_container_status['error']}")
             value, traceback = dill.loads(
-                await self.executor.gcs_fs.read_binary_gs_file(self.output_gcs))
+                await self.executor.gcs_fs.read(self.output_gcs))
             if traceback is None:
                 return value
             assert isinstance(value, BaseException)

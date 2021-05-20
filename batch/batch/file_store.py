@@ -84,7 +84,7 @@ class FileStore:
         write1 = self.fs.write(idx_url, offsets_bytes)
 
         specs_url = self.specs_path(batch_id, token)
-        write2 = self.fs.write(specs_url, data_bytes.encode('utf-8'))
+        write2 = self.fs.write(specs_url, data_bytes)
 
         await asyncio.gather(write1, write2)
 
