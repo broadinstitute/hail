@@ -151,8 +151,6 @@ class AsyncFS(abc.ABC):
             return await f.read(n)
 
     async def write(self, url: str, data: bytes) -> None:
-        await self.makedirs(os.path.dirname(url), exist_ok=True)
-
         async def _write() -> None:
             async with await self.create(url, retry_writes=False) as f:
                 await f.write(data)
@@ -908,10 +906,6 @@ class RouterAsyncFS(AsyncFS):
     async def rmtree(self, sema: Optional[asyncio.Semaphore], url: str) -> None:
         fs = self._get_fs(url)
         return await fs.rmtree(sema, url)
-
-    async def exists(self, url: str) -> bool:
-        fs = self._get_fs(url)
-        return await fs.exists(url)
 
     async def close(self) -> None:
         for fs in self._filesystems:

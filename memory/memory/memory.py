@@ -54,7 +54,7 @@ async def write_object(request, userdata):
     filepath = request.query.get('q')
     userinfo = await get_or_add_user(request.app, userdata)
     username = userdata['username']
-    data = bytes(await request.read())
+    data = await request.read()
     log.info(f'memory: post for object {filepath} from user {username}')
 
     file_key = make_redis_key(username, filepath)

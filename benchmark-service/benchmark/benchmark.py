@@ -443,8 +443,13 @@ async def on_startup(app):
 
 
 async def on_cleanup(app):
-    await app['gh_client_session'].close()
-    app['task_manager'].shutdown()
+    try:
+        await app['gh_client_session'].close()
+    finally:
+        try:
+            await app['gs_reader'].close()
+        finally:
+            app['task_manager'].shutdown()
 
 
 def run():

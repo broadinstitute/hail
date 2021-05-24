@@ -34,16 +34,11 @@ class Tests(unittest.TestCase):
         self.test_path = f'gs://{bucket_name}/memory-tests/{token}'
 
         self.fs = GoogleStorageAsyncFS(project=os.environ['PROJECT'])
-        self.sem = asyncio.Semaphore(50)
         self.client = BlockingMemoryClient(fs=self.fs)
         self.temp_files = set()
 
     def tearDown(self):
-        async def delete_files(url):
-            async with self.sem:
-                await self.fs.rmtree(self.sem, url)
-
-        async_to_blocking(delete_files(self.test_path))
+        async_to_blocking(self.fs.rmtree(None, self.test_path))
         self.client.close()
 
     async def add_temp_file_from_string(self, name: str, str_value: bytes):

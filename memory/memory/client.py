@@ -63,3 +63,5 @@ class MemoryClient:
     async def close(self):
         await self._session.close()
         self._session = None
+        await self._fs.close()
+        self._fs = None
