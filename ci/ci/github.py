@@ -427,7 +427,7 @@ mkdir -p {shq(repo_dir)}
                 config = BuildConfiguration(self, f.read(), scope='test')
 
             log.info(f'creating test batch for {self.number}')
-            batch = batch_client.create_batch(
+            batch = await batch_client.create_batch(
                 attributes={
                     'token': secrets.token_hex(16),
                     'test': '1',
@@ -440,7 +440,7 @@ mkdir -p {shq(repo_dir)}
                 callback=CALLBACK_URL,
             )
             config.build(batch, self, scope='test')
-            batch = await batch.submit()
+            await batch.submit()
             self.batch = batch
         except concurrent.futures.CancelledError:
             raise
@@ -820,7 +820,7 @@ mkdir -p {shq(repo_dir)}
                 config = BuildConfiguration(self, f.read(), scope='deploy')
 
             log.info(f'creating deploy batch for {self.branch.short_str()}')
-            deploy_batch = batch_client.create_batch(
+            deploy_batch = await batch_client.create_batch(
                 attributes={
                     'token': secrets.token_hex(16),
                     'deploy': '1',
@@ -830,7 +830,7 @@ mkdir -p {shq(repo_dir)}
                 callback=CALLBACK_URL,
             )
             config.build(deploy_batch, self, scope='deploy')
-            deploy_batch = await deploy_batch.submit()
+            await deploy_batch.submit()
             self.deploy_batch = deploy_batch
         except concurrent.futures.CancelledError:
             raise
@@ -898,7 +898,7 @@ mkdir -p {shq(repo_dir)}
 
             log.info(f'creating dev deploy batch for {self.branch.short_str()} and user {self.user}')
 
-            deploy_batch = batch_client.create_batch(
+            deploy_batch = await batch_client.create_batch(
                 attributes={
                     'token': secrets.token_hex(16),
                     'target_branch': self.branch.short_str(),
@@ -908,7 +908,7 @@ mkdir -p {shq(repo_dir)}
                 }
             )
             config.build(deploy_batch, self, scope='dev')
-            deploy_batch = await deploy_batch.submit()
+            await deploy_batch.submit()
             self.deploy_batch = deploy_batch
             return deploy_batch.id
         finally:

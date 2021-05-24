@@ -131,9 +131,10 @@ CREATE TABLE IF NOT EXISTS `batches` (
   `attributes` TEXT,
   `callback` TEXT,
   `state` VARCHAR(40) NOT NULL,
+  `closed` BOOLEAN NOT NULL DEFAULT FALSE,
   `deleted` BOOLEAN NOT NULL DEFAULT FALSE,
   `cancelled` BOOLEAN NOT NULL DEFAULT FALSE,
-  `n_jobs` INT NOT NULL,
+  `n_jobs` INT NOT NULL DEFAULT 0,
   `n_completed` INT NOT NULL DEFAULT 0,
   `n_succeeded` INT NOT NULL DEFAULT 0,
   `n_failed` INT NOT NULL DEFAULT 0,
@@ -141,10 +142,13 @@ CREATE TABLE IF NOT EXISTS `batches` (
   `time_created` BIGINT NOT NULL,
   `time_closed` BIGINT,
   `time_completed` BIGINT,
+  `time_last_updated` BIGINT,
   `msec_mcpu` BIGINT NOT NULL DEFAULT 0,
   `token` VARCHAR(100) DEFAULT NULL,
   `format_version` INT NOT NULL,
   `cancel_after_n_failures` INT DEFAULT NULL,
+  `max_idle_time` INT DEFAULT NULL,
+  `n_commits` INT NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   FOREIGN KEY (`billing_project`) REFERENCES billing_projects(name)
 ) ENGINE = InnoDB;
@@ -153,6 +157,7 @@ CREATE INDEX `batches_deleted` ON `batches` (`deleted`);
 CREATE INDEX `batches_token` ON `batches` (`token`);
 CREATE INDEX `batches_time_completed` ON `batches` (`time_completed`);
 CREATE INDEX `batches_billing_project_state` ON `batches` (`billing_project`, `state`);
+CREATE INDEX `batches_closed_state_format_version_last_updated` ON `batches` (`closed`, `state`, `format_version`, `time_last_updated`);
 
 CREATE TABLE IF NOT EXISTS `batches_inst_coll_staging` (
   `batch_id` BIGINT NOT NULL,
@@ -196,12 +201,14 @@ CREATE TABLE IF NOT EXISTS `jobs` (
   `msec_mcpu` BIGINT NOT NULL DEFAULT 0,
   `attempt_id` VARCHAR(40),
   `inst_coll` VARCHAR(255),
+  `committed` BOOLEAN NOT NULL,
   PRIMARY KEY (`batch_id`, `job_id`),
   FOREIGN KEY (`batch_id`) REFERENCES batches(id) ON DELETE CASCADE,
   FOREIGN KEY (`inst_coll`) REFERENCES inst_colls(name) ON DELETE CASCADE
 ) ENGINE = InnoDB;
 CREATE INDEX `jobs_batch_id_state_always_run_inst_coll_cancelled` ON `jobs` (`batch_id`, `state`, `always_run`, `inst_coll`, `cancelled`);
 CREATE INDEX `jobs_batch_id_state_always_run_cancelled` ON `jobs` (`batch_id`, `state`, `always_run`, `cancelled`);
+CREATE INDEX `jobs_committed` ON `jobs` (`committed`);
 
 CREATE TABLE IF NOT EXISTS `batch_bunches` (
   `batch_id` BIGINT NOT NULL,
@@ -749,28 +756,27 @@ BEGIN
   END IF;
 END $$
 
-DROP PROCEDURE IF EXISTS close_batch $$
-CREATE PROCEDURE close_batch(
+DROP PROCEDURE IF EXISTS commit_staged_jobs $$
+CREATE PROCEDURE commit_staged_jobs(
   IN in_batch_id BIGINT,
   IN in_timestamp BIGINT
 )
 BEGIN
-  DECLARE cur_batch_state VARCHAR(40);
-  DECLARE expected_n_jobs INT;
+  DECLARE cur_batch_closed BOOLEAN;
+  DECLARE cur_n_commits INT;
   DECLARE staging_n_jobs INT;
   DECLARE staging_n_ready_jobs INT;
   DECLARE staging_ready_cores_mcpu BIGINT;
-  DECLARE cur_user VARCHAR(100);
 
   START TRANSACTION;
 
-  SELECT `state`, n_jobs INTO cur_batch_state, expected_n_jobs FROM batches
+  SELECT `closed`, `n_commits` INTO cur_batch_closed, cur_n_commits FROM batches
   WHERE id = in_batch_id AND NOT deleted
   FOR UPDATE;
 
-  IF cur_batch_state != 'open' THEN
+  IF cur_batch_closed THEN
     COMMIT;
-    SELECT 0 as rc;
+    SELECT 1 as rc;
   ELSE
     SELECT COALESCE(SUM(n_jobs), 0), COALESCE(SUM(n_ready_jobs), 0), COALESCE(SUM(ready_cores_mcpu), 0)
     INTO staging_n_jobs, staging_n_ready_jobs, staging_ready_cores_mcpu
@@ -778,55 +784,68 @@ BEGIN
     WHERE batch_id = in_batch_id
     FOR UPDATE;
 
-    SELECT user INTO cur_user FROM batches WHERE id = in_batch_id;
+    INSERT INTO user_inst_coll_resources (user, inst_coll, token, n_ready_jobs, ready_cores_mcpu)
+    SELECT user, inst_coll, 0, @n_ready_jobs := COALESCE(SUM(n_ready_jobs), 0), @ready_cores_mcpu := COALESCE(SUM(ready_cores_mcpu), 0)
+    FROM batches_inst_coll_staging
+    JOIN batches ON batches.id = batches_inst_coll_staging.batch_id
+    WHERE batch_id = in_batch_id
+    GROUP BY `user`, inst_coll
+    ON DUPLICATE KEY UPDATE
+      n_ready_jobs = n_ready_jobs + @n_ready_jobs,
+      ready_cores_mcpu = ready_cores_mcpu + @ready_cores_mcpu;
 
-    IF staging_n_jobs = expected_n_jobs THEN
-      IF expected_n_jobs = 0 THEN
-        UPDATE batches SET `state` = 'complete', time_completed = in_timestamp, time_closed = in_timestamp
-          WHERE id = in_batch_id;
-      ELSE
-        UPDATE batches SET `state` = 'running', time_closed = in_timestamp
-          WHERE id = in_batch_id;
-      END IF;
+    UPDATE batches
+    SET `state` = IF(staging_n_jobs != 0,
+                     'running',
+                     IF(n_jobs != 0, `state`, 'complete')),
+      time_last_updated = in_timestamp,
+      n_jobs = n_jobs + staging_n_jobs,
+      n_commits = n_commits + 1
+    WHERE id = in_batch_id;
 
-      INSERT INTO user_inst_coll_resources (user, inst_coll, token, n_ready_jobs, ready_cores_mcpu)
-      SELECT user, inst_coll, 0, @n_ready_jobs := COALESCE(SUM(n_ready_jobs), 0), @ready_cores_mcpu := COALESCE(SUM(ready_cores_mcpu), 0)
-      FROM batches_inst_coll_staging
-      JOIN batches ON batches.id = batches_inst_coll_staging.batch_id
-      WHERE batch_id = in_batch_id
-      GROUP BY `user`, inst_coll
-      ON DUPLICATE KEY UPDATE
-        n_ready_jobs = n_ready_jobs + @n_ready_jobs,
-        ready_cores_mcpu = ready_cores_mcpu + @ready_cores_mcpu;
-
-      DELETE FROM batches_inst_coll_staging WHERE batch_id = in_batch_id;
-
-      COMMIT;
-      SELECT 0 as rc;
-    ELSE
-      ROLLBACK;
-      SELECT 2 as rc, expected_n_jobs, staging_n_jobs as actual_n_jobs, 'wrong number of jobs' as message;
+    IF cur_n_commits > 0 THEN
+      UPDATE jobs
+        INNER JOIN (
+          SELECT `job_parents`.batch_id, `job_parents`.job_id,
+            COALESCE(SUM(1), 0) AS n_parents,
+            COALESCE(SUM(state IN ('Pending', 'Ready', 'Creating', 'Running')), 0) AS n_pending_parents,
+            COALESCE(SUM(state = 'Success'), 0) AS n_succeeded
+          FROM `job_parents`
+          LEFT JOIN `jobs` ON jobs.batch_id = `job_parents`.batch_id AND jobs.job_id = `job_parents`.parent_id
+          WHERE `job_parents`.batch_id = in_batch_id
+          GROUP BY `job_parents`.batch_id, `job_parents`.job_id
+          FOR UPDATE
+        ) AS t
+          ON jobs.batch_id = t.batch_id AND
+             jobs.job_id = t.job_id
+        SET jobs.state = IF(t.n_pending_parents = 0, 'Ready', 'Pending'),
+            jobs.n_pending_parents = t.n_pending_parents,
+            jobs.cancelled = IF(t.n_pending_parents > 0 OR t.n_succeeded = t.n_parents, jobs.cancelled, 1)
+        WHERE jobs.batch_id = in_batch_id AND
+              jobs.committed = 0;
     END IF;
+
+    DELETE FROM batches_inst_coll_staging WHERE batch_id = in_batch_id;
+
+    COMMIT;
+    SELECT 0 as rc;
   END IF;
 END $$
 
 DROP PROCEDURE IF EXISTS cancel_batch $$
 CREATE PROCEDURE cancel_batch(
-  IN in_batch_id VARCHAR(100)
+  IN in_batch_id VARCHAR(100),
+  IN in_timestamp BIGINT
 )
 BEGIN
   DECLARE cur_user VARCHAR(100);
   DECLARE cur_batch_state VARCHAR(40);
   DECLARE cur_cancelled BOOLEAN;
-  DECLARE cur_n_cancelled_ready_jobs INT;
-  DECLARE cur_cancelled_ready_cores_mcpu BIGINT;
-  DECLARE cur_n_cancelled_running_jobs INT;
-  DECLARE cur_cancelled_running_cores_mcpu BIGINT;
-  DECLARE cur_n_n_cancelled_creating_jobs INT;
 
   START TRANSACTION;
 
-  SELECT user, `state`, cancelled INTO cur_user, cur_batch_state, cur_cancelled FROM batches
+  SELECT user, `state`, cancelled INTO cur_user, cur_batch_state, cur_cancelled
+  FROM batches
   WHERE id = in_batch_id
   FOR UPDATE;
 
@@ -862,8 +881,13 @@ BEGIN
     # there are no cancellable jobs left, they have been cancelled
     DELETE FROM batch_inst_coll_cancellable_resources WHERE batch_id = in_batch_id;
 
-    UPDATE batches SET cancelled = 1 WHERE id = in_batch_id;
+    DELETE FROM batches_inst_coll_staging WHERE batch_id = in_batch_id;
+
   END IF;
+
+  UPDATE batches
+  SET cancelled = 1, closed = 1, time_completed = IF(n_completed != n_jobs, NULL, in_timestamp)
+  WHERE id = in_batch_id;
 
   COMMIT;
 END $$
@@ -1172,9 +1196,10 @@ BEGIN
     SET state = new_state, status = new_status, attempt_id = in_attempt_id
     WHERE batch_id = in_batch_id AND job_id = in_job_id;
 
-    UPDATE batches SET n_completed = n_completed + 1 WHERE id = in_batch_id;
+    UPDATE batches SET n_completed = n_completed + 1, time_last_updated = new_timestamp WHERE id = in_batch_id;
+
     UPDATE batches
-      SET time_completed = new_timestamp,
+      SET time_completed = IF(closed, new_timestamp, NULL),
           `state` = 'complete'
       WHERE id = in_batch_id AND n_completed = batches.n_jobs;
 
