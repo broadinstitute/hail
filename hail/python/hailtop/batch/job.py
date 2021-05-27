@@ -912,8 +912,8 @@ class PythonJob(Job):
             job_path = os.path.dirname(result._get_path(remote_tmpdir))
             code_path = f'{job_path}/code{i}.p'
 
-            async_to_blocking(self._batch._gcs_fs.makedirs(os.path.dirname(code_path), exist_ok=True))
-            async_to_blocking(self._batch._gcs_fs.write(code_path, pipe.getvalue()))
+            async_to_blocking(self._batch._fs.makedirs(os.path.dirname(code_path), exist_ok=True))
+            async_to_blocking(self._batch._fs.write(code_path, pipe.getvalue()))
 
             code = self._batch.read_input(code_path)
             self._add_inputs(code)
