@@ -345,7 +345,6 @@ class BatchPoolExecutor:
         dill.dump(functools.partial(unapplied, *args, **kwargs), pipe, recurse=True)
         pipe.seek(0)
         pickledfun_gcs = self.inputs + f'{name}/pickledfun'
-        await self.gcs_fs.makedirs(os.path.dirname(pickledfun_gcs), exist_ok=True)
         await self.gcs_fs.write(pickledfun_gcs, pipe.getvalue())
         pickledfun_local = batch.read_input(pickledfun_gcs)
 
