@@ -138,7 +138,7 @@ object AbstractRVDSpec {
       case _ => (None, None)
     }
 
-    val reader = PartitionZippedNativeReader(specLeft.typedCodecSpec, specRight.typedCodecSpec, indexSpecLeft, indexSpecRight, requestedKey)
+    val reader = PartitionZippedNativeReader(specLeft.typedCodecSpec, specRight.typedCodecSpec, indexSpecLeft, indexSpecRight, specLeft.key)
 
     val absPathLeft = removeFileProtocol(pathLeft)
     val absPathRight = removeFileProtocol(pathRight)
