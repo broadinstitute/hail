@@ -1,14 +1,14 @@
 import os
 import re
-import concurrent
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, Union, List, Any, Set
 
 from hailtop.utils import secret_alnum_string
+from hailtop.aiotools import RouterAsyncFS, LocalAsyncFS
+from hailtop.aiogoogle import GoogleStorageAsyncFS
 
 from . import backend as _backend, job, resource as _resource  # pylint: disable=cyclic-import
 from .exceptions import BatchException
-
-from ..google_storage import GCS
 
 
 class Batch:
@@ -138,16 +138,15 @@ class Batch:
         self._default_python_image = default_python_image
 
         self._project = project
-        self.__gcs: Optional[GCS] = None
+        self.__fs: Optional[RouterAsyncFS] = None
 
         self._cancel_after_n_failures = cancel_after_n_failures
 
     @property
-    def _gcs(self):
-        if self.__gcs is None:
-            self.__gcs = GCS(blocking_pool=concurrent.futures.ThreadPoolExecutor(),
-                             project=self._project)
-        return self.__gcs
+    def _fs(self):
+        if self.__fs is None:
+            self.__fs = RouterAsyncFS('file', [LocalAsyncFS(ThreadPoolExecutor()), GoogleStorageAsyncFS(project=self._project)])
+        return self.__fs
 
     def new_job(self,
                 name: Optional[str] = None,
