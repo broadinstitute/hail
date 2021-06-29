@@ -162,11 +162,11 @@ final case class EBaseStruct(fields: IndexedSeq[EField], override val required: 
           })
         }
       } else {
-        val skip = f.typ.buildSkip(cb.emb)
+        val skip = f.typ.buildSkip(cb.emb.ecb)
         if (f.typ.required)
-          cb += skip(region, in)
+          skip(cb, region, in)
         else
-          cb.ifx(!Region.loadBit(mbytes, const(missingIdx(f.index).toLong)), cb += skip(region, in))
+          cb.ifx(!Region.loadBit(mbytes, const(missingIdx(f.index).toLong)), skip(cb, region, in))
       }
     }
   }
@@ -175,11 +175,11 @@ final case class EBaseStruct(fields: IndexedSeq[EField], override val required: 
     val mbytes = cb.newLocal[Long]("mbytes", r.allocate(const(1), const(nMissingBytes)))
     cb += in.readBytes(r, mbytes, nMissingBytes)
     fields.foreach { f =>
-      val skip = f.typ.buildSkip(cb.emb)
+      val skip = f.typ.buildSkip(cb.emb.ecb)
       if (f.typ.required)
-        cb += skip(r, in)
+        skip(cb, r, in)
       else
-        cb.ifx(!Region.loadBit(mbytes, missingIdx(f.index).toLong), cb += skip(r, in))
+        cb.ifx(!Region.loadBit(mbytes, missingIdx(f.index).toLong), skip(cb, r, in))
     }
   }
 
