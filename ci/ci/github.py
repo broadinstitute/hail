@@ -522,8 +522,9 @@ mkdir -p {shq(repo_dir)}
         if not await self.authorized(dbpool):
             return
 
-        if not self.batch or (on_deck and self.batch.attributes['target_sha'] != self.target_branch.sha):
-
+        if (
+            not self.batch or (on_deck and self.batch.attributes['target_sha'] != self.target_branch.sha)
+        ) and not self.source_sha_failed:
             if on_deck or self.target_branch.n_running_batches < 8:
                 self.target_branch.n_running_batches += 1
                 async with repos_lock:
