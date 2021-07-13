@@ -134,7 +134,7 @@ object AbstractRVDSpec {
     }
 
     val (indexSpecLeft, indexSpecRight) = (specLeft, specRight) match {
-      case (l: Indexed, r: Indexed) if specLeft.key.nonEmpty => (Some(l.indexSpec), Some(r.indexSpec))
+      case (l: Indexed, r: Indexed) if newPartitioner.nonEmpty => (Some(l.indexSpec), Some(r.indexSpec))
       case _ => (None, None)
     }
 
