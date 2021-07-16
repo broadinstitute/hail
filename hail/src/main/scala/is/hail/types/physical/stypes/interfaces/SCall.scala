@@ -2,6 +2,7 @@ package is.hail.types.physical.stypes.interfaces
 
 import is.hail.asm4s.{Code, Value}
 import is.hail.expr.ir.EmitCodeBuilder
+import is.hail.types.physical.stypes.primitives.SInt32Code
 import is.hail.types.physical.stypes.{SCode, SType, SValue}
 
 trait SCall extends SType
@@ -14,6 +15,10 @@ trait SCallValue extends SValue {
   def forEachAllele(cb: EmitCodeBuilder)(alleleCode: Value[Int] => Unit): Unit
 
   def canonicalCall(cb: EmitCodeBuilder): Code[Int]
+
+  override def hash(cb: EmitCodeBuilder): SInt32Code = {
+    new SInt32Code(canonicalCall(cb))
+  }
 }
 
 trait SCallCode extends SCode {
