@@ -18,10 +18,25 @@ object UtilFunctions extends RegistryFunctions {
 
   def parseBoolean(s: String): Boolean = s.toBoolean
 
-  def parseInt32(s: String): Int = s.toInt
+  def parseInt32(s: String): Int = {
+    try {
+      s.toInt
+    }
+    catch {
+      case nfe: NumberFormatException =>
+        throw new HailException(s"Could not parse '${s}' as Int32")
+    }
+  }
 
-  def parseInt64(s: String): Long = s.toLong
-
+  def parseInt64(s: String): Long = {
+    try {
+      s.toLong
+    }
+    catch {
+      case nfe: NumberFormatException =>
+        throw new HailException(s"Could not parse '${s}' as Int32")
+    }
+  }
   def parseSpecialNum32(s: String): Float = {
     s.length match {
       case 3 =>
@@ -38,7 +53,7 @@ object UtilFunctions extends RegistryFunctions {
         if (s.equalsCaseInsensitive("-infinity")) return Float.NegativeInfinity
       case _ =>
     }
-    throw new NumberFormatException(s"cannot parse float32 from $s")
+    throw new HailException(s"cannot parse float32 from $s")
   }
 
   def parseSpecialNum64(s: String): Double = {
@@ -57,7 +72,7 @@ object UtilFunctions extends RegistryFunctions {
         if (s.equalsCaseInsensitive("-infinity")) return Double.NegativeInfinity
       case _ =>
     }
-    throw new NumberFormatException(s"cannot parse float64 from $s")
+    throw new HailException(s"cannot parse float64 from $s")
   }
 
   def parseFloat32(s: String): Float = {
@@ -86,6 +101,7 @@ object UtilFunctions extends RegistryFunctions {
       s.toInt; true
     } catch {
       case _: NumberFormatException => false
+
     }
 
   def isValidInt64(s: String): Boolean =
@@ -99,14 +115,14 @@ object UtilFunctions extends RegistryFunctions {
     parseFloat32(s)
     true
   } catch {
-    case _: NumberFormatException => false
+    case _: HailException => false
   }
 
   def isValidFloat64(s: String): Boolean = try {
     parseFloat64(s)
     true
   } catch {
-    case _: NumberFormatException => false
+    case _: HailException => false
   }
 
   def min_ignore_missing(l: Int, lMissing: Boolean, r: Int, rMissing: Boolean): Int =
@@ -200,7 +216,8 @@ object UtilFunctions extends RegistryFunctions {
           val s = x.loadString()
           primitive(rt.virtualType, Code.invokeScalaObject1(thisClass, s"parse$name", s)(ctString, ct))
       }
-      registerIEmitCode1(s"to${name}OrMissing", TString, t, (_: Type, xPT: EmitType) => EmitType(rpt, xPT.required)) {
+
+      registerIEmitCode1(s"to${name}OrMissing", TString, t, (_: Type, xPT: EmitType) => EmitType(rpt, false)) {
         case (cb, r, rt, _, x) =>
           x.toI(cb).flatMap(cb) { case (sc: SStringCode) =>
             val sv = cb.newLocal[String]("s", sc.loadString())
